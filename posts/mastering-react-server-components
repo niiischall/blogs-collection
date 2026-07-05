@@ -1,0 +1,507 @@
+Dive deeper into the concept of **React Server Components**. Build a full-stack app with server components using Next.js and SQLite DB.
+
+### 👋 Intro
+
+Here’s something to make you feel old: React was first released by Facebook on **May 29, 2013**. As of today, it is **almost 12 years old**.
+
+In this time, the popular framework has gone through several evolutions. In its most latest avatar, it is in shape of **React Server Components**. The concept of enabling react to run exclusively on the sever.
+
+I’ve been experimenting in the last couple of weeks on similar lines and now I have with me a full-stack web app to help demystify all this for you, once and for all.
+
+---
+
+### 📜 Prerequisites
+
+This is intentionally not a Next.js blog tutorial.
+
+At this point, I am assuming you know the ins and outs of the framework as I will use it as a medium to show you how RSCs work. If you’re not, I will strongly suggest to checkout the [official documentation](https://nextjs.org/docs) of Next.js.
+
+---
+
+### 💭 Primer
+
+Next.js is a pretty great frontend framework built by [Vercel](https://vercel.com/). A lot of React core team works at Vercel and therefore a lot of new changes show up in Next.js first.
+
+> Next.js has evolved quite a fair bit in the last few years. In the current form, Next.js make RSCs first class citizens where everything is a server component by default and one has to opt-in for a client-side component.
+
+---
+
+### 🎯 What We’ll Be Building
+
+We’ll be building a CRUD app called **Pass the notes**. This app will have four individual routes namely **My Notes**, **Write a note**, **Secret Feed** and **Profile**.
+
+![](https://cdn.hashnode.com/res/hashnode/image/upload/v1743097998892/6627643c-73cb-4246-9243-96d98d9d42b5.gif align="center")
+
+Okay, let's shape this app to be what we need.
+
+---
+
+### 🌎 Hello World
+
+You can go ahead and clone this [starter kit](https://github.com/niiischall/rsc-starter-kit). This repo has everything needed for you to get up and running with building the app.
+
+Next we'll modify `src/app/page.js`:
+
+```javascript
+import Link from "next/link";
+
+export default function Home() {
+  return (
+    <div>
+      <ul>
+        <li>
+          <Link href="/my">My Notes</Link>
+        </li>
+        <li>
+          <Link href="/write">Write a Note</Link>
+        </li>
+        <li>
+          <Link href="/feed">My Feed</Link>
+        </li>
+        <li>
+          <Link href="/profile">My Profile</Link>
+        </li>
+      </ul>
+    </div>
+  );
+}
+```
+
+And now `layout.js`:
+
+```javascript
+import Link from "next/link";
+import "doodle.css/doodle.css";
+import "./globals.css";
+
+export const metadata = {
+  title: "Pass the notes",
+  description: "App for Mastering React Server Components",
+};
+
+export default async function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body className="doodle">
+        <nav>
+          <h1>
+            <Link href="/">Passing the notes</Link>
+          </h1>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
+```
+
+Great stuff! This is just boilerplate code stuff that we needed to get out quickly off the bat. The important thing to note here was that `page.js` will be our homepage and `layout.js` will be the layout file that wraps all our components.
+
+---
+
+### 🛠️ Server Functions
+
+So let’s do a server component now where a user can read all their own individual notes.
+
+Make a folder inside the `app` directory call `my`. Inside the new directory, create a file called `page.js`. This will show up the page when the route `/my` is navigated in the client.
+
+Inside the `page.js`, paste the following code:
+
+```javascript
+import { AsyncDatabase } from "promised-sqlite3";
+
+// this page assumes that you are logged in as user 1
+export default async function MyNotes() {
+  async function fetchNotes() {
+    const db = await AsyncDatabase.open("./notes.db");
+    const fromPromise = db.all(
+      "SELECT n.id as id, n.note as note, f.name as from_user, t.name as to_user FROM notes n JOIN users f ON f.id = n.from_user JOIN users t ON t.id = n.to_user WHERE from_user = ?",
+      ["1"]
+    );
+    const toPromise = db.all(
+      "SELECT n.id as id, n.note as note, f.name as from_user, t.name as to_user FROM notes n JOIN users f ON f.id = n.from_user JOIN users t ON t.id = n.to_user WHERE to_user = ?",
+      ["1"]
+    );
+    const [from, to] = await Promise.all([fromPromise, toPromise]);
+    return {
+      from,
+      to,
+    };
+  }
+
+  const notes = await fetchNotes();
+
+  return (
+    <div>
+      <h1>My Notes</h1>
+      <fieldset>
+        <legend>Notes To You</legend>
+        <table>
+          <thead>
+            <tr>
+              <th>From</th>
+              <th>To</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {notes.to.map(({ id, note, from_user, to_user }) => (
+              <tr key={id}>
+                <td>{from_user}</td>
+                <td>{to_user}</td>
+                <td>{note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </fieldset>
+      <fieldset>
+        <legend>Notes From You</legend>
+        <table>
+          <thead>
+            <tr>
+              <th>From</th>
+              <th>To</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {notes.from.map(({ id, note, from_user, to_user }) => (
+              <tr key={id}>
+                <td>{from_user}</td>
+                <td>{to_user}</td>
+                <td>{note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </fieldset>
+    </div>
+  );
+}
+```
+
+Now if you navigate to `/my` by clicking on **My Notes** in the index route, you will see two lists of **Notes To You** and **Notes From You.**
+
+There you go, we have just built our first React Server Component!
+
+At the moment, this component is keeping **user 1** as constant. You will be able to see the notes mapped to user 1.
+
+This is not a client-side component but rather an **async server function**. Since it’s a function that runs on the server, we are able to use the SQLite driver. You can confirm this by looking at the `Network` tab.
+
+---
+
+### 🚀 Server Actions
+
+A common user interaction on a website is to submit a form. Sometimes its a traditional *“fill the form and submit”* or maybe using a form under the hood to handle user inputs.
+
+<mark>We can build a similar feature with React Server Components using </mark> **<mark>“server actions”</mark>**<mark>. We can create a form in a RSC containing an action to run on the server. This simplifies a frontend form and a backend service to run together at the same place in the code.</mark>
+
+Create a `write` folder inside the `app` directory, put a `page.js` file in the new folder and paste the following code:
+
+```javascript
+import { AsyncDatabase } from "promised-sqlite3";
+import postNote from "./postNote";
+
+export default async function Write() {
+  async function getUsers() {
+    const db = await AsyncDatabase.open("./notes.db");
+    return db.all("SELECT * FROM users");
+  }
+  const users = await getUsers();
+
+  return (
+    <div>
+      <fieldset className="note-fieldset">
+        <legend>Write a new note</legend>
+        <form action={postNote} className="note-form">
+          <label>
+            From
+            <select name="from_user">
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            To
+            <select defaultValue={2} name="to_user">
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Note
+            <textarea name="note" />
+          </label>
+          <button type="submit">Save</button>
+        </form>
+      </fieldset>
+    </div>
+  );
+}
+```
+
+Here, `<form action={postNote} className="note-form">` is what we’re interested with. We will need to code the `postNote` server action now.
+
+The interesting part is that we don’t have to worry about transporting the data from the client form to the server action as React will handle it for us.
+
+Let’s write `postNote.js` in the same directory:
+
+```javascript
+"use server";
+
+import { AsyncDatabase } from "promised-sqlite3";
+
+export default async function postNote(formData) {
+  console.log("postNote called", formData);
+
+  const from = formData.get("from_user");
+  const to = formData.get("to_user");
+  const note = formData.get("note");
+
+  if (!from || !to || !note) {
+    throw new Error("All fields are required");
+  }
+
+  const db = await AsyncDatabase.open("./notes.db");
+  await db.run(
+    "INSERT INTO notes (from_user, to_user, note) VALUES (?, ?, ?)",
+    [from, to, note]
+  );
+}
+```
+
+Here we need to use the directive of `use server` at the top since we need to explicitly tell React to run this function on the server.
+
+<mark>Now, if you observe we bypassed writing all the api handshake code here and everything got handled by the server action.</mark>
+
+Pretty cool, right?
+
+---
+
+### 🤝 Combining Server and Client Components
+
+Up until now we have created standalone server components however a question comes:
+
+> **“how do we mix server and client components?”**
+
+We can easily do it by being a little judicious of how we nest things and using React's ability to nest components.
+
+Let’s have a new route called **“feed”** where we will list out all the notes being passed between different users. We want this list to be continuously updated.
+
+We’ll enable this through first calling the api inside a parent server component and enabling polling inside a child client component.
+
+Make a folder called `feed` inside the `app` directory and put a `page.js` file inside it:
+
+```javascript
+import FeedClientPage from "./clientPage";
+import fetchNotes from "./fetchNotes";
+
+export default async function Feed() {
+  const initialNotes = await fetchNotes();
+  return (
+    <FeedClientPage initialNotes={initialNotes} fetchNotes={fetchNotes} />
+  );
+}
+```
+
+**Feed** is a server component which loads the notes through `fetchNotes` only during first mount.
+
+Now let’s go ahead and create **fetchNotes** inside `fetchNotes.js` in the same folder:
+
+```javascript
+"use server";
+import { AsyncDatabase } from "promised-sqlite3";
+
+export default async function fetchNotes(since) {
+  const db = await AsyncDatabase.open("./notes.db");
+  let rows;
+  if (since) {
+    rows = await db.all(
+      "SELECT n.id as id, n.note as note, f.name as from_user, t.name as to_user FROM notes n JOIN users f ON f.id = n.from_user JOIN users t ON t.id = n.to_user WHERE n.id > ? LIMIT 50",
+      [since]
+    );
+  } else {
+    rows = await db.all(
+      "SELECT n.id as id, n.note as note, f.name as from_user, t.name as to_user FROM notes n JOIN users f ON f.id = n.from_user JOIN users t ON t.id = n.to_user LIMIT 50"
+    );
+  }
+  return rows;
+}
+```
+
+We will share this server function with both the server and client component. Now, let’s go ahead and make the `clientPage.js` inside the same directory of `feed`.
+
+```javascript
+"use client";
+import { useState, useEffect } from "react";
+
+export default function FeedClientPage({ fetchNotes, initialNotes }) {
+  const [notes, setNotes] = useState(initialNotes ? initialNotes : []);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      let since;
+      if (notes.length > 0) {
+        since = notes[notes.length - 1]?.id ?? null;
+      }
+      const newNotes = await fetchNotes(since);
+      setNotes([...notes, ...newNotes]);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div>
+      <h1>My Feed:</h1>
+      <ul>
+        {notes.map((note) => (
+          <li key={note.id}>
+            <fieldset>
+              <h2>
+                from: {note.from_user} | to: {note.to_user}
+              </h2>
+              <p>{note.note}</p>
+            </fieldset>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+Since this is a client component, we will need to explicitly mention `use client` directive at the top of the file.
+
+And there you go! **We now have a client component nested inside a server component** while both of them using the same server function. Best of both worlds.
+
+Now what if we have to **nest a server component inside a client component** ?  
+  
+It works, though with some caveats. The important thing to remember here is:
+
+> By necessity, server components render first and client components second.
+
+Let’s see how we can by-pass this limitation through a neat little trick.
+
+Make a folder in app, call it `profile`. Put a `page.js` file there and paste the following code:
+
+```javascript
+import ClientPage from "./clientPage";
+import Profile from "./profile";
+
+export default async function ProfilePafe() {
+  return (
+    <ClientPage id={1}>
+      <Profile />
+    </ClientPage>
+  );
+}
+```
+
+By pre-rendering the server component `Profile` as a children of the client component `ClientPage`, we render the server component first and pass the result to the client component to render it.
+
+Now, let’s write the server component `Profile.js` in the same directory:
+
+```javascript
+import { AsyncDatabase } from "promised-sqlite3";
+
+// this page assumes that you are logged in as user 1
+async function getProfile() {
+  const db = await AsyncDatabase.open("./notes.db");
+  return db.get("SELECT * FROM users WHERE id = ?", ["1"]);
+}
+
+export default async function Profile() {
+  const user = await getProfile();
+
+  return (
+    <div>
+      <h1>Who Am I?</h1>
+      <p>
+        You are {user.name} and your id is {user.id}
+      </p>
+    </div>
+  );
+} 
+```
+
+And now the client component, `clientPage.js` in the same directory:
+
+```javascript
+import updateUsername from "./updateUsername";
+
+export default function ClientPage({ children, id }) {
+  return (
+    <div>
+      {children}
+      <form action={updateUsername}>
+        <h2>Enter new username</h2>
+        <input type="text" name="username" placeholder="username" />
+        <input type="hidden" name="id" value={id} />
+        <button type="submit">Submit</button>
+      </form>
+    </div>
+  );
+}
+```
+
+Here, `updateUsername` is a server action being used in the form. Let’s create it in the same directory:
+
+```javascript
+"use server";
+import { AsyncDatabase } from "promised-sqlite3";
+import { redirect } from "next/navigation";
+
+export default async function updateUsername(formData) {
+  console.log("updateUsername called", formData);
+
+  const username = formData.get("username");
+  const id = formData.get("id");
+
+  if (!username || !id) {
+    throw new Error("All fields are required");
+  }
+
+  const db = await AsyncDatabase.open("./notes.db");
+  await db.run("UPDATE users SET name = ? WHERE id = ?", [username, id]);
+  redirect("/");
+}
+```
+
+We’re done! Everything should work now.
+
+Few **important things** to note about these caveats of combining server and client components:
+
+* Server data can be supplied from server to client component. However, **the reverse is not possible**. We will have to write such child components as client components.
+    
+* We can do a hack such as above, as long as the server component is not directly dependent on client component’s data.
+    
+* If such a case do arise, we should fetch the data from the client component and **trigger a full refresh** in order to re-render the server child component which makes sense because **server components only run once**.
+    
+
+---
+
+### ✨ Conclusion
+
+![](https://cdn.hashnode.com/res/hashnode/image/upload/v1743195983132/912380f8-3608-4fb6-ace7-0f179739c34e.gif align="left")
+
+**That’s right, we did!**
+
+Through building this CRUD app from scratch, you got a **hands-on experience** of building React Server Components, both individually and combined with the good old client component.
+
+There’s still a lot you can do! You can…
+
+1. Integrate an **Auth Provider** with our app and remove the constant user ID. I would highly recommend using something like [Clerk](https://clerk.com) to achieve this!
+    
+2. You can also take our `notes.db` file to the **cloud**.
+    
+
+Thank you for sticking around till the very end. I’ll see you in the next one.
+
+**Keep deploying stuff :)**
