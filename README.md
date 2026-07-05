@@ -1,2 +1,5 @@
 # blogs-collection
-Markdown source for my tech blog posts
+
+Personal essays and technical writing.
+
+Topics include AI, software engineering, frontend architecture, agentic systems, and product development.
